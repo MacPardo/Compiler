@@ -1,0 +1,7 @@
+data RegExp = Epsilon
+            | Concat Char RegExp
+            | Union Char RegExp
+            | Star RegExp
+            deriving (Show)
+
+
