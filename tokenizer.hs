@@ -11,28 +11,21 @@ import qualified Data.Map.Strict as Map
 import Debug.Trace (trace, traceShow)
 import Data.Maybe (isJust, fromJust)
 
-prefixTrace :: (Show a) => String -> a -> a
-prefixTrace s a = trace (s ++ (show a)) a
-
-mapOfSetsUnions :: (Foldable t, Ord a, Ord b) => t (Map a (Set b)) -> Map a (Set b)
-mapOfSetsUnions a = foldr f Map.empty a 
-  where f m acc = Map.union (Map.mapWithKey mergeValues acc) m
-          where mergeValues k v
-                  |isJust mRules = Set.union (fromJust mRules) v
-                  |otherwise = v
-                  where mRules = Map.lookup k m
-
-
-
 class Mergeable a where
   (<++>) :: a -> a -> a
+  mergeEmpty :: a
 infixr 7 <++>
+
+mergeAll :: (Foldable t, Mergeable a) => t a -> a
+mergeAll = foldr (<++>) mergeEmpty
 
 instance (Ord a) => Mergeable (Set a) where
   (<++>) = Set.union
+  mergeEmpty = Set.empty
 
 instance (Show k, Ord k, Mergeable a) => Mergeable (Map k a) where
-  a <++> b = trace ("keys: {" ++ (show keys)  ++ "}") foldr aux Map.empty keys where
+  mergeEmpty = Map.empty
+  a <++> b = foldr aux Map.empty keys where
     keys = (Map.keysSet a) `Set.union` (Map.keysSet b)
     aux key acc = (merged `Map.union` acc) where
       merged = merge (key `Map.lookup` a) (key `Map.lookup` b)
@@ -57,7 +50,7 @@ type Rule = (NonTerminal, Production)
 data State = State String
            | FinalState String
            | InitialState
-           | UFinalState 
+           | GenericFinalState 
            deriving (Show, Eq, Ord)
 
 type StateSet = Set State
@@ -110,8 +103,8 @@ findFinalStateNames a = Set.map fst . Set.filter isFinal $ a where
   isFinal _ = False
 
   
---updateFinalStateRules :: Set Rule -> Set Rule
-rulesToNFA a = traceShow a (Set.map ruleToMap $ a) where
+rulesToNFA :: Set Rule -> NFA
+rulesToNFA a = mergeAll . Set.map ruleToMap $ a where
   finalStateNames = findFinalStateNames a
   isFinal name = name `Set.member` finalStateNames
   stringToState s
@@ -122,7 +115,7 @@ rulesToNFA a = traceShow a (Set.map ruleToMap $ a) where
   ruleToMap (name, (TerminalRule t)) =
     Map.singleton 
       (stringToState name) 
-      (Map.singleton t (Set.singleton UFinalState))
+      (Map.singleton t (Set.singleton GenericFinalState))
   ruleToMap (name, (NonTerminalRule nt)) =
     Map.singleton 
       (stringToState name) 
@@ -131,29 +124,34 @@ rulesToNFA a = traceShow a (Set.map ruleToMap $ a) where
     Map.singleton 
       (stringToState name)
       (Map.singleton t (Set.singleton $ stringToState nt))
-
---ruleToNFA :: (State, Production) -> NFA
---ruleToNFA (state, TerminalRule Epsilon)
---  = Map.empty
---ruleToNFA (state, TerminalRule t)
---  = Map.singleton state (Map.singleton t FinalState)
---ruleToNFA (state, NonTerminalRule )
-
---printRules :: Set Rule -> IO ()
-printRules a = do
-  forM_ (Set.toList a) $ \(h, b) -> do
-    putStrLn $ "rule( " ++ h ++ " ) = " ++ (show b)
     
+printNFA :: NFA -> IO ()
+printNFA nfa = do
+  let states = Map.keys nfa
+  forM_ states $ \state -> do
+    let map = nfa Map.! state
+    let terms = Map.keys map
+    print state
+    forM_ terms $ \term -> do
+      putStr "\t"
+      print term
+      let targetStates = map Map.! term
+      forM_ targetStates $ \ts -> do
+        putStr "\t\t"
+        print ts
 
+nfaToDfa :: NFA -> DFA
+nfaToDfa = Map.mapKeys Set.singleton
 
 main = do
   args <- getArgs
   let inputFile = args !! 0
   inputText <- readFile inputFile
   let rules = linesToRules inputText
-  print . findFinalStateNames $ rules
+  --print . findFinalStateNames $ rules
 
   let nfa = rulesToNFA rules
-  print nfa
+  --print nfa
+  printNFA nfa
 
   putStrLn ""
