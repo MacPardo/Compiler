@@ -6,8 +6,8 @@ import Control.Monad (forM_)
 import Data.List.Split (splitOn)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Debug.Trace (trace, traceShow)
 import Data.Maybe (isJust, fromJust)
 
@@ -22,9 +22,24 @@ mapOfSetsUnions a = foldr f Map.empty a
                   |otherwise = v
                   where mRules = Map.lookup k m
 
---mapOfMapsOfSetsUnions :: (Foldable t, Ord a, 
 
 
+class Mergeable a where
+  (<++>) :: a -> a -> a
+infixr 7 <++>
+
+instance (Ord a) => Mergeable (Set a) where
+  (<++>) = Set.union
+
+instance (Show k, Ord k, Mergeable a) => Mergeable (Map k a) where
+  a <++> b = trace ("keys: {" ++ (show keys)  ++ "}") foldr aux Map.empty keys where
+    keys = (Map.keysSet a) `Set.union` (Map.keysSet b)
+    aux key acc = (merged `Map.union` acc) where
+      merged = merge (key `Map.lookup` a) (key `Map.lookup` b)
+      merge Nothing  Nothing  = Map.empty
+      merge Nothing  (Just b) = Map.singleton key b
+      merge (Just a) Nothing  = Map.singleton key a
+      merge (Just a) (Just b) = Map.singleton key (a <++> b)
 
 data Terminal = Terminal Char 
               | Epsilon 
