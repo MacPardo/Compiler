@@ -58,7 +58,12 @@ type StateSet = Set State
 type NFA = Map State    (Map Terminal StateSet)
 type DFA = Map StateSet (Map Terminal StateSet)
 
+isEpsilon :: Terminal -> Bool
+isEpsilon Epsilon = True
+isEpsilon _       = False
+
 epsilonRepresentation = '§'
+initialStateRepresentation = "$"
 
 charToTerminal :: Char -> Terminal
 charToTerminal c
@@ -108,6 +113,7 @@ rulesToNFA a = mergeAll . Set.map ruleToMap $ a where
   finalStateNames = findFinalStateNames a
   isFinal name = name `Set.member` finalStateNames
   stringToState s
+    | s == initialStateRepresentation = InitialState
     | isFinal s = FinalState s
     | otherwise = State s
   ruleToMap :: Rule -> NFA
@@ -124,6 +130,56 @@ rulesToNFA a = mergeAll . Set.map ruleToMap $ a where
     Map.singleton 
       (stringToState name)
       (Map.singleton t (Set.singleton $ stringToState nt))
+
+hasEpsilonTransitions :: NFA -> Bool
+hasEpsilonTransitions = 
+  any isEpsilon . 
+  concat . 
+  map Map.keys . 
+  Map.elems
+
+getOneEpsilonTransition :: NFA -> Maybe State
+getOneEpsilonTransition nfa = 
+  case keys of
+    (x:xs) -> Just x
+    _      -> Nothing
+  where keys = Map.keys . Map.filter (Epsilon `Map.member`) $ nfa
+
+--epsilonClosureAux :: StateSet -> NFA -> State -> StateSet
+epsilonClosureAux visited nfa state
+--  | state `Set.member` visited = visited
+  | otherwise =
+    let et = (state `Map.lookup` nfa) >>= 
+             (Map.lookup Epsilon) >>= 
+             (Just . Set.filter (not . (`Set.member` visited)))
+    in case et of
+      Nothing     -> visited
+      Just states -> states
+
+--epsilonClosure :: NFA -> State -> StateSet
+--epsilonClosure = epsilonClosureAux Set.empty
+
+--getEpsilonClosure :: NFA -> State -> StateSet
+getEpsilonClosure nfa visited state =
+  undefined
+  where
+    
+
+
+
+
+--removeEpsilonTransitions :: NFA -> NFA
+removeEpsilonTransitions nfa
+  | isJust maybeEts = 
+    let ets = fromJust maybeEts 
+        epsilonClosure = (nfa Map.! ets) Map.! Epsilon
+        prods = 
+          Map.singleton ets . 
+          mergeAll . 
+          Set.map (nfa Map.!) $ epsilonClosure
+    in prods <++> nfa
+  | otherwise = undefined
+  where maybeEts = getOneEpsilonTransition nfa
     
 printNFA :: NFA -> IO ()
 printNFA nfa = do
@@ -143,6 +199,14 @@ printNFA nfa = do
 nfaToDfa :: NFA -> DFA
 nfaToDfa = Map.mapKeys Set.singleton
 
+testNfa :: IO NFA
+testNfa = do
+  let inputFile = "in1"
+  inputText <- readFile inputFile
+  let rules = linesToRules inputText
+  let nfa = rulesToNFA rules
+  return nfa
+
 main = do
   args <- getArgs
   let inputFile = args !! 0
@@ -153,5 +217,8 @@ main = do
   let nfa = rulesToNFA rules
   --print nfa
   printNFA nfa
+  print . hasEpsilonTransitions $ nfa
+  putStrLn "\n\n\n"
+  printNFA . removeEpsilonTransitions $ nfa
 
   putStrLn ""
