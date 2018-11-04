@@ -145,28 +145,16 @@ getOneEpsilonTransition nfa =
     _      -> Nothing
   where keys = Map.keys . Map.filter (Epsilon `Map.member`) $ nfa
 
---epsilonClosureAux :: StateSet -> NFA -> State -> StateSet
-epsilonClosureAux visited nfa state
---  | state `Set.member` visited = visited
-  | otherwise =
-    let et = (state `Map.lookup` nfa) >>= 
-             (Map.lookup Epsilon) >>= 
-             (Just . Set.filter (not . (`Set.member` visited)))
-    in case et of
-      Nothing     -> visited
-      Just states -> states
-
---epsilonClosure :: NFA -> State -> StateSet
---epsilonClosure = epsilonClosureAux Set.empty
-
---getEpsilonClosure :: NFA -> State -> StateSet
-getEpsilonClosure nfa visited state =
-  undefined
-  where
+getEpsilonClosure :: NFA -> StateSet -> State -> StateSet
+getEpsilonClosure nfa visited state
+  | (state `Set.member` visited) = visited
+  | otherwise = mergeAll $ Set.map (\s -> getEpsilonClosure nfa newVisited s) sts
+  where 
+    newVisited = state `Set.insert` visited
+    sts = case (state `Map.lookup` nfa) >>= (Epsilon `Map.lookup`) of
+      Just x -> x
+      Nothing -> Set.empty
     
-
-
-
 
 --removeEpsilonTransitions :: NFA -> NFA
 removeEpsilonTransitions nfa
